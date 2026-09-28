@@ -1,0 +1,303 @@
+<?php
+/** @var \Myshopcarts\SalesAssistant\Block\Adminhtml\Knowledge $block */
+/** @var \Magento\Framework\Escaper $escaper */
+$documents = $block->getDocuments();
+$config = [
+    'previewUrl' => $block->getPreviewUrl(),
+    'saveUrl' => $block->getSaveUrl(),
+    'deleteUrl' => $block->getDeleteUrl(),
+    'clearUrl' => $block->getClearUrl(),
+    'rebuildUrl' => $block->getRebuildUrl(),
+    'priorityUrl' => $block->getPriorityUrl(),
+    'discoverUrl' => $block->getDiscoverUrl(),
+    'crawlStartUrl' => $block->getCrawlStartUrl(),
+    'crawlStatusUrl' => $block->getCrawlStatusUrl(),
+    'crawlCancelUrl' => $block->getCrawlCancelUrl(),
+    'crawlDeleteUrl' => $block->getCrawlDeleteUrl(),
+    'crawlResultsUrl' => $block->getCrawlResultsUrl(),
+];
+$crawlJobs = $block->getCrawlJobs();
+?>
+<?php if (!$block->isConfigured()): ?>
+    <div class="message message-warning">
+        <?= $escaper->escapeHtml(__('Configure the Sales Assistant (API base, WS URL, secret key) before uploading knowledge.')) ?>
+    </div>
+<?php else: ?>
+<style>
+    .msc-sa-status { display:inline-block; font-weight:600; font-size:1.4rem; line-height:1.6; }
+    .msc-sa-status:empty { display:none; }
+    .msc-sa-status.msc-sa-status--busy {
+        color:#1787e0; background:#eaf4fd; padding:.6rem 1.2rem; border-radius:1.5rem;
+        animation:mscSaPulse 1.2s ease-in-out infinite;
+    }
+    .msc-sa-status.msc-sa-status--busy::before {
+        content:''; display:inline-block; width:1.1rem; height:1.1rem; margin-right:.8rem;
+        border:2px solid #1787e0; border-top-color:transparent; border-radius:50%;
+        vertical-align:-1px; animation:mscSaSpin .7s linear infinite;
+    }
+    .msc-sa-status.msc-sa-status--error {
+        color:#e02b27; background:#fae5e5; padding:.6rem 1.2rem; border-radius:1.5rem;
+    }
+    @keyframes mscSaSpin { to { transform:rotate(360deg); } }
+    @keyframes mscSaPulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+    .msc-sa-consent { display:flex; gap:.6rem; align-items:flex-start; max-width:640px; cursor:pointer; }
+    .msc-sa-consent input { margin-top:.3rem; }
+    .msc-sa-crawl-tools { display:flex; align-items:center; gap:.5rem; margin:.5rem 0; flex-wrap:wrap; }
+    .msc-sa-count { color:#303030; font-weight:600; margin-left:.5rem; }
+    /* Root cause (confirmed via computed styles): the admin fieldset squishes a bare child that
+       declares no width to width:0, so the toolbar's buttons overflowed off the right edge and the
+       crawls table's scroll wrapper clipped its (present) 6 rows to nothing. Force these containers
+       to full width — width AND flex-basis, so it holds whether the fieldset lays out as block or flex. */
+    .msc-sa-doctools { display:block; width:100%; flex:0 0 100%; box-sizing:border-box; margin:0 0 1.5rem; text-align:left; }
+    .msc-sa-doctools .action-secondary { display:inline-block !important; float:none !important; vertical-align:middle; white-space:nowrap; margin:0 1rem 0 0 !important; }
+    .msc-sa-doctools .msc-sa-count { display:inline-block; vertical-align:middle; margin-right:1rem; }
+    .msc-sa-danger, .msc-sa-danger:hover { border-color:#e02b27 !important; color:#e02b27 !important; }
+    [data-role=crawls-body] { width:100%; flex:0 0 100%; box-sizing:border-box; }
+    /* Wide grids scroll horizontally (admin-grid parity) — but only when actually narrower than
+       the table; the wrapper must itself be full width or it collapses and clips the grid. */
+    .msc-sa-tablescroll { overflow-x:auto; -webkit-overflow-scrolling:touch; width:100%; flex:0 0 100%; box-sizing:border-box; }
+    .msc-sa-tablescroll > .data-grid { min-width:640px; }
+    .msc-sa-crawl-list { max-height:320px; overflow:auto; border:1px solid #d6d6d6; border-radius:3px;
+        background:#fff; padding:.6rem .8rem; }
+    .msc-sa-crawl-list label { display:flex; gap:.6rem; align-items:center; padding:.15rem 0; font-size:1.3rem; }
+    .msc-sa-crawl-list label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .msc-sa-crawl-list label.is-hidden { display:none; }
+    .msc-sa-bar { height:1.2rem; background:#eee; border-radius:.6rem; overflow:hidden; max-width:640px; }
+    .msc-sa-bar span { display:block; height:100%; width:0; background:#1787e0; transition:width .4s ease; }
+    .msc-sa-urlrow { font-size:1.2rem; padding:.1rem 0; }
+    .msc-sa-pager { margin:1rem 0 2rem; display:flex; gap:.8rem; align-items:center; }
+    .msc-sa-pager .pg-info { color:#303030; font-weight:600; }
+    .msc-sa-pager[hidden] { display:none; }
+    .st-indexed { color:#1a7f37; font-weight:600; } .st-skipped { color:#8a6d00; font-weight:600; }
+    .st-error { color:#e02b27; font-weight:600; }
+</style>
+<div class="msc-sa-knowledge" data-role="msc-sa-knowledge">
+    <div data-role="messages"></div>
+    <?php if ($block->isCmsAutoIndexOn()): ?>
+    <div class="message message-notice" style="margin-bottom:2rem;">
+        <?= $escaper->escapeHtml(__('Your store’s own CMS pages and static blocks are indexed automatically as the assistant’s knowledge — you don’t need to add them here. Use the tools below only to add content from elsewhere: upload files (PDF, Word…), or crawl another website you own. You can turn automatic indexing off under Stores → Configuration → Services → Sales Assistant → Knowledge indexing.')) ?>
+    </div>
+    <?php endif; ?>
+    <fieldset class="admin__fieldset">
+        <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Add a document')) ?></span></legend>
+        <p class="note"><?= $escaper->escapeHtml(__('PDF, Word (.docx), Markdown, HTML or text. You will preview the extracted text before it is added.')) ?></p>
+        <div class="admin__field">
+            <label class="admin__field-label"><?= $escaper->escapeHtml(__('Upload files')) ?></label>
+            <div class="admin__field-control">
+                <input type="file" data-role="file" multiple accept=".pdf,.docx,.doc,.md,.markdown,.txt,.html,.htm"/>
+                <p class="note"><?= $escaper->escapeHtml(__('The extracted text is previewed automatically once you choose a file. Select several to add them together.')) ?></p>
+            </div>
+        </div>
+        <div class="admin__field">
+            <label class="admin__field-label"></label>
+            <div class="admin__field-control"><span data-role="status" class="msc-sa-status"></span></div>
+        </div>
+    </fieldset>
+
+    <fieldset class="admin__fieldset">
+        <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Crawl a whole website')) ?></span></legend>
+        <p class="note"><?= $escaper->escapeHtml(__('Enter a site and we’ll find its pages (from the sitemap, or by following links), let you pick which to add, then ingest them in the background. Only the site you enter is crawled — no external links are followed.')) ?></p>
+        <div class="admin__field">
+            <label class="admin__field-label"><?= $escaper->escapeHtml(__('Site URL')) ?></label>
+            <div class="admin__field-control">
+                <input type="url" class="admin__control-text" data-role="crawl-root" placeholder="https://…" style="max-width:520px;"/>
+            </div>
+        </div>
+        <div class="admin__field">
+            <label class="admin__field-label"></label>
+            <div class="admin__field-control">
+                <label class="msc-sa-consent">
+                    <input type="checkbox" data-role="crawl-consent"/>
+                    <span><?= $escaper->escapeHtml(__('I own this website, or I have the site owner’s permission to crawl it and use the retrieved content in my store’s assistant.')) ?></span>
+                </label>
+            </div>
+        </div>
+        <div class="admin__field">
+            <label class="admin__field-label"></label>
+            <div class="admin__field-control">
+                <button type="button" class="action-secondary" data-role="crawl-discover">
+                    <span><?= $escaper->escapeHtml(__('Find pages')) ?></span>
+                </button>
+                <span data-role="crawl-status" class="msc-sa-status" style="margin-left:1rem;"></span>
+            </div>
+        </div>
+
+        <div data-role="crawl-picker" style="display:none;">
+            <div class="admin__field">
+                <div class="admin__field-control">
+                    <p class="note" data-role="crawl-note"></p>
+                    <div class="msc-sa-crawl-tools">
+                        <button type="button" class="action-secondary" data-role="crawl-all"><span><?= $escaper->escapeHtml(__('Select all')) ?></span></button>
+                        <button type="button" class="action-secondary" data-role="crawl-none"><span><?= $escaper->escapeHtml(__('Select none')) ?></span></button>
+                        <input type="text" class="admin__control-text" data-role="crawl-filter" placeholder="<?= $escaper->escapeHtmlAttr(__('filter by path, e.g. /docs')) ?>" style="max-width:260px;margin-left:.5rem;"/>
+                        <span class="msc-sa-count" data-role="crawl-selcount"></span>
+                    </div>
+                    <div class="msc-sa-crawl-list" data-role="crawl-list"></div>
+                    <button type="button" class="action-primary" data-role="crawl-start" style="margin:1rem 0 2.5rem;"><span><?= $escaper->escapeHtml(__('Start crawl')) ?></span></button>
+                </div>
+            </div>
+        </div>
+
+        <div data-role="crawl-progress" style="display:none;">
+            <div class="admin__field">
+                <div class="admin__field-control">
+                    <div class="msc-sa-bar"><span data-role="crawl-bar"></span></div>
+                    <p class="note" data-role="crawl-progress-text"></p>
+                    <button type="button" class="action-secondary" data-role="crawl-cancel" style="margin-bottom:2.5rem;"><span><?= $escaper->escapeHtml(__('Cancel')) ?></span></button>
+                </div>
+            </div>
+        </div>
+    </fieldset>
+
+    <?php if (!empty($crawlJobs)): ?>
+    <fieldset class="admin__fieldset">
+        <legend class="admin__legend"><span><a href="#" data-role="crawls-toggle" style="text-decoration:none;color:inherit;cursor:pointer;"><span data-role="crawls-caret">&#9656;</span> <?= $escaper->escapeHtml(__('Recent crawls')) ?> (<?= (int)count($crawlJobs) ?>)</a></span></legend>
+        <div data-role="crawls-body" style="display:none;">
+        <div class="msc-sa-doctools">
+            <button type="button" class="action-secondary" data-role="crawl-delete-selected" disabled>
+                <span><?= $escaper->escapeHtml(__('Delete selected')) ?></span></button>
+            <span class="msc-sa-count" data-role="crawl-selcount"></span>
+        </div>
+        <div class="msc-sa-tablescroll">
+        <table class="data-grid">
+            <thead>
+                <tr>
+                    <th style="width:2.8rem;text-align:center;"><input type="checkbox" data-role="crawl-selectall" title="<?= $escaper->escapeHtmlAttr(__('Select all')) ?>"/></th>
+                    <th><?= $escaper->escapeHtml(__('Site')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Status')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Added')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Skipped')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Failed')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Total')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('When')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Results')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($crawlJobs as $job): ?>
+                <tr data-job-id="<?= $escaper->escapeHtmlAttr($job['job_id']) ?>">
+                    <td style="text-align:center;"><input type="checkbox" data-role="crawl-check"/></td>
+                    <td><?= $escaper->escapeHtml($job['root_url']) ?></td>
+                    <td><?= $escaper->escapeHtml($job['status']) ?></td>
+                    <td><?= $escaper->escapeHtml($job['done_urls']) ?></td>
+                    <td><?= $escaper->escapeHtml($job['skipped_urls']) ?></td>
+                    <td><?= $escaper->escapeHtml($job['failed_urls']) ?></td>
+                    <td><?= $escaper->escapeHtml($job['total_urls']) ?></td>
+                    <td><?= $escaper->escapeHtml($job['created_at']) ?></td>
+                    <td><button type="button" class="action-secondary" data-role="crawl-view"
+                                data-job-id="<?= $escaper->escapeHtmlAttr($job['job_id']) ?>"><span><?= $escaper->escapeHtml(__('View results')) ?></span></button></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+
+        <!-- Results load only on demand (View results); never on page load. -->
+        <div data-role="crawl-results" style="display:none;margin-top:1.5rem;">
+            <div class="msc-sa-crawl-tools">
+                <strong data-role="crawl-results-title"></strong>
+                <button type="button" class="action-secondary" data-role="crawl-download" style="margin-left:1rem;"><span><?= $escaper->escapeHtml(__('Download CSV')) ?></span></button>
+                <button type="button" class="action-secondary" data-role="crawl-results-close"><span><?= $escaper->escapeHtml(__('Close')) ?></span></button>
+            </div>
+            <div class="msc-sa-tablescroll">
+            <table class="data-grid">
+                <thead>
+                    <tr>
+                        <th><?= $escaper->escapeHtml(__('Page')) ?></th>
+                        <th><?= $escaper->escapeHtml(__('Result')) ?></th>
+                        <th><?= $escaper->escapeHtml(__('Chunks')) ?></th>
+                        <th><?= $escaper->escapeHtml(__('Note')) ?></th>
+                    </tr>
+                </thead>
+                <tbody data-role="crawl-results-body"></tbody>
+            </table>
+            </div>
+            <div class="msc-sa-pager" data-role="crawl-results-pager"></div>
+        </div>
+        </div><!-- /crawls-body -->
+    </fieldset>
+    <?php endif; ?>
+
+    <fieldset class="admin__fieldset" data-role="preview-area" style="display:none;">
+        <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Preview — review before adding')) ?> <span data-role="queuepos"></span></span></legend>
+        <div class="admin__field">
+            <label class="admin__field-label"><?= $escaper->escapeHtml(__('Title')) ?></label>
+            <div class="admin__field-control"><input type="text" class="admin__control-text" data-role="title"/></div>
+        </div>
+        <div class="admin__field">
+            <label class="admin__field-label"><?= $escaper->escapeHtml(__('Extracted text')) ?></label>
+            <div class="admin__field-control">
+                <textarea class="admin__control-textarea" rows="16" data-role="markdown" style="width:100%;font-family:monospace;"></textarea>
+                <p class="note" data-role="chunkinfo"></p>
+                <p class="note" data-role="warn" style="display:none;color:#e07b00;font-weight:bold;"></p>
+                <p class="note" data-role="samplenote" style="display:none;font-weight:bold;"></p>
+            </div>
+        </div>
+        <div class="admin__field">
+            <div class="admin__field-control">
+                <button type="button" class="action-primary" data-role="save"><span><?= $escaper->escapeHtml(__('Add to knowledge base')) ?></span></button>
+                <button type="button" class="action-primary" data-role="addall" style="display:none;"><span><?= $escaper->escapeHtml(__('Add all to knowledge base')) ?></span></button>
+                <button type="button" class="action-secondary" data-role="cancel" style="margin-left:1rem;"><span><?= $escaper->escapeHtml(__('Cancel')) ?></span></button>
+            </div>
+        </div>
+    </fieldset>
+
+    <fieldset class="admin__fieldset" style="margin-top:3rem;">
+        <legend class="admin__legend"><span><?= $escaper->escapeHtml(__('Knowledge documents')) ?></span></legend>
+        <div class="msc-sa-doctools">
+            <button type="button" class="action-secondary" data-role="delete-selected" disabled>
+                <span><?= $escaper->escapeHtml(__('Delete selected')) ?></span></button>
+            <select class="admin__control-select" data-role="priority-level" style="display:inline-block;width:auto;vertical-align:middle;">
+                <option value="1"><?= $escaper->escapeHtml(__('Normal priority')) ?></option>
+                <option value="2"><?= $escaper->escapeHtml(__('High priority')) ?></option>
+                <option value="3"><?= $escaper->escapeHtml(__('Highest priority')) ?></option>
+            </select>
+            <button type="button" class="action-secondary" data-role="set-priority" disabled
+                    title="<?= $escaper->escapeHtmlAttr(__('Boost the selected sources’ ranking when they’re relevant — e.g. a curated plans doc')) ?>">
+                <span><?= $escaper->escapeHtml(__('Set priority')) ?></span></button>
+            <button type="button" class="action-secondary" data-role="rebuild-list" title="<?= $escaper->escapeHtmlAttr(__('Rebuild this list from what’s already indexed — for content added before it was tracked. Does not re-crawl or change the assistant’s data.')) ?>">
+                <span><?= $escaper->escapeHtml(__('Rebuild list from index')) ?></span></button>
+            <span class="msc-sa-count" data-role="doc-selcount"></span>
+            <button type="button" class="action-secondary msc-sa-danger" data-role="clear-all" title="<?= $escaper->escapeHtmlAttr(__('Remove every document and empty this store’s assistant knowledge index')) ?>">
+                <span><?= $escaper->escapeHtml(__('Clear knowledge base')) ?></span></button>
+        </div>
+        <div class="msc-sa-tablescroll">
+        <table class="data-grid" data-role="doclist">
+            <thead>
+                <tr>
+                    <th style="width:2.8rem;text-align:center;"><input type="checkbox" data-role="doc-selectall" title="<?= $escaper->escapeHtmlAttr(__('Select all')) ?>"/></th>
+                    <th><?= $escaper->escapeHtml(__('Title')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Source')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Chunks')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Priority')) ?></th>
+                    <th><?= $escaper->escapeHtml(__('Updated')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($documents as $doc): ?>
+                <tr data-source-id="<?= $escaper->escapeHtmlAttr($doc['source_id']) ?>">
+                    <td style="text-align:center;"><input type="checkbox" data-role="doc-check"/></td>
+                    <td><?= $escaper->escapeHtml($doc['title'] ?: $doc['source_id']) ?></td>
+                    <td><?= $escaper->escapeHtml($doc['filename'] ?: ($doc['url'] ?? '')) ?></td>
+                    <td><?= $escaper->escapeHtml($doc['chunk_count']) ?></td>
+                    <td data-role="priority-cell"><?= $escaper->escapeHtml($block->priorityLabel((int)($doc['priority'] ?? 1))) ?></td>
+                    <td><?= $escaper->escapeHtml($doc['updated_at']) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            <?php if (empty($documents)): ?>
+                <tr data-role="empty"><td colspan="6"><?= $escaper->escapeHtml(__('No documents yet.')) ?></td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
+        </div>
+        <div class="msc-sa-pager" data-role="doclist-pager"></div>
+    </fieldset>
+</div>
+<script type="text/x-magento-init">
+{
+    "[data-role=msc-sa-knowledge]": {
+        "Myshopcarts_SalesAssistant/js/knowledge": <?= /* @noEscape */ json_encode($config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>
+    }
+}
+</script>
+<?php endif; ?>

@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="myshopcarts_salesassistant" translate="label" sortOrder="1010"
+                 showInDefault="1" showInWebsite="0" showInStore="0">
+            <label>Sales Assistant</label>
+            <tab>service</tab>
+            <resource>Myshopcarts_SalesAssistant::config</resource>
+            <group id="api" translate="label" sortOrder="10" showInDefault="1">
+                <label>Sales Assistant (AI shopping assistant)</label>
+                <comment>Values come from your MyShopCarts subscription (the API base URL, WebSocket URL and secret key). The secret key is stored encrypted and never sent to the browser.</comment>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1">
+                    <label>Enable widget</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="api_base" translate="label" type="text" sortOrder="20" showInDefault="1">
+                    <label>API base URL</label>
+                    <comment>Your subscription's API base URL. Used server-side for /widget-token and /embed.</comment>
+                </field>
+                <field id="ws_url" translate="label" type="text" sortOrder="30" showInDefault="1">
+                    <label>WebSocket URL</label>
+                    <comment>Your subscription's WebSocket URL (wss://…/ws). The widget connects here with a short-lived token.</comment>
+                </field>
+                <field id="secret_key" translate="label" type="obscure" sortOrder="40" showInDefault="1">
+                    <label>Merchant secret key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Your subscription's secret key (sk_sa_…). Stored encrypted; used server-side only.</comment>
+                </field>
+                <field id="assistant_name" translate="label" type="text" sortOrder="45" showInDefault="1">
+                    <label>Assistant name</label>
+                    <comment>What the assistant calls itself if a shopper asks (e.g. “Max”). Leave blank for the default.</comment>
+                </field>
+                <field id="business_context" translate="label" type="textarea" sortOrder="46" showInDefault="1">
+                    <label>What your store offers</label>
+                    <comment>A few sentences describing what your store sells and how the assistant should help — e.g. “We sell outdoor gear and clothing; help shoppers find the right kit for their trip and answer questions about sizing, materials and care.” It shapes how the assistant introduces itself and frames its answers. Keep it to things true on EVERY conversation — specific products, prices and stock come from your catalogue and knowledge, not here. Safety guardrails (answer only from your catalogue/knowledge; never invent) always stay on. A general product-store default is pre-set — edit it to fit your store.</comment>
+                </field>
+                <field id="call_to_action" translate="label" type="text" sortOrder="47" showInDefault="1">
+                    <label>Call to action</label>
+                    <comment>Where to send a shopper who's ready to buy — e.g. “Browse our collection: https://www.example.com/shop” or “Contact us at hello@example.com”. The assistant offers this as the next step when appropriate. Leave blank to omit.</comment>
+                </field>
+                <field id="greeting" translate="label" type="textarea" sortOrder="50" showInDefault="1">
+                    <label>Welcome message</label>
+                    <comment>Shown when a shopper first opens the assistant (e.g. “Hi, I'm Max — how can I help?”). Leave blank to use the default.</comment>
+                </field>
+                <field id="header_color" translate="label comment" type="text" sortOrder="55" showInDefault="1">
+                    <label>Header colour</label>
+                    <comment>Brand colour for the chat header bar, the “Chat” launcher button and the Send button, as a hex value (e.g. #1a1a2e or #2563eb). Their text automatically switches to black or white for contrast. Leave blank for the default dark colour.</comment>
+                </field>
+            </group>
+            <group id="knowledge" translate="label" sortOrder="20" showInDefault="1">
+                <label>Knowledge indexing</label>
+                <comment>Choose which of your store's own content the assistant indexes automatically. Turn these OFF if you feed the assistant only via the website crawler or file uploads — otherwise the same page is indexed twice. Changes take effect on the next reindex; turning a source off and reindexing also removes what it had already indexed.</comment>
+                <field id="index_cms_pages" translate="label comment" type="select" sortOrder="10" showInDefault="1">
+                    <label>Auto-index CMS pages</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Index your active CMS pages (policies, FAQ, guides…) as assistant knowledge. Magento's system pages (no-route, enable-cookies) are always skipped.</comment>
+                </field>
+                <field id="index_cms_blocks" translate="label comment" type="select" sortOrder="20" showInDefault="1">
+                    <label>Auto-index CMS static blocks</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Index your active CMS static blocks as assistant knowledge.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

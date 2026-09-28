@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Indexer/etc/indexer.xsd">
+    <indexer id="myshopcarts_salesassistant_catalogue"
+             view_id="myshopcarts_salesassistant_catalogue"
+             class="Myshopcarts\SalesAssistant\Model\Indexer\Catalogue">
+        <title translate="true">Sales Assistant Catalogue</title>
+        <description translate="true">Embeds the catalogue into the Sales Assistant vector index</description>
+    </indexer>
+    <indexer id="myshopcarts_salesassistant_knowledge"
+             view_id="myshopcarts_salesassistant_knowledge"
+             class="Myshopcarts\SalesAssistant\Model\Indexer\Knowledge">
+        <title translate="true">Sales Assistant Knowledge</title>
+        <description translate="true">Embeds CMS pages / documents into the Sales Assistant knowledge index</description>
+    </indexer>
+</config>

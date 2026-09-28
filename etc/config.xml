@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <myshopcarts_salesassistant>
+            <api>
+                <enabled>0</enabled>
+                <!-- Default "What your store offers" — written for a general PRODUCT store.
+                     Merchants edit it to describe their own shop; a service (e.g. hosting)
+                     replaces it entirely. Behaviour + framing only — no prices/stock/policies
+                     (those come from the catalogue + knowledge via retrieval). -->
+                <business_context>This is an online store. Help shoppers find products that match what they are looking for, answer questions about items and how the store works (shipping, returns, sizing, availability), and guide them toward a purchase. When a shopper describes what they want, use it to narrow down suitable products, and ask a short clarifying question if the request is ambiguous. Suggest close alternatives when the exact item is not available. Product details, prices, stock and store policies come from the store's own catalogue and knowledge; rely on those and never state a price, product, or policy that is not in the provided results.</business_context>
+            </api>
+            <knowledge>
+                <!-- Auto-index the store's own CMS content by default (zero-config knowledge from
+                     the merchant's policy/FAQ pages + blocks). Crawl-driven stores turn these off
+                     to avoid indexing the same page twice. -->
+                <index_cms_pages>1</index_cms_pages>
+                <index_cms_blocks>1</index_cms_blocks>
+            </knowledge>
+        </myshopcarts_salesassistant>
+    </default>
+</config>

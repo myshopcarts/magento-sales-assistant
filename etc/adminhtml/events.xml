@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!--
+  Trigger the FIRST catalogue/knowledge index when the merchant saves the Sales Assistant config
+  (enable + key) — invalidate the (empty) indexers so cron's reindex-all-invalid builds them with the
+  key present, instead of racing cron before activation. Non-blocking; see the observer.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="admin_system_config_changed_section_myshopcarts_salesassistant">
+        <observer name="myshopcarts_salesassistant_invalidate_indexers"
+                  instance="Myshopcarts\SalesAssistant\Observer\InvalidateAssistantIndexers"/>
+    </event>
+</config>

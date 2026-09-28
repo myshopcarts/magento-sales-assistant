@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- Inject the assistant widget on every storefront page (before body close). -->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <head>
+        <css src="Myshopcarts_SalesAssistant::css/widget.css"/>
+    </head>
+    <body>
+        <referenceContainer name="before.body.end">
+            <block class="Myshopcarts\SalesAssistant\Block\Widget"
+                   name="myshopcarts.salesassistant.widget"
+                   template="Myshopcarts_SalesAssistant::widget.phtml"/>
+        </referenceContainer>
+    </body>
+</page>

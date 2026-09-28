@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="Myshopcarts_SalesAssistant::knowledge"
+             title="Sales Assistant Knowledge"
+             translate="title"
+             module="Myshopcarts_SalesAssistant"
+             sortOrder="80"
+             parent="Magento_Backend::content"
+             action="salesassistant/document/index"
+             resource="Myshopcarts_SalesAssistant::knowledge"/>
+    </menu>
+</config>

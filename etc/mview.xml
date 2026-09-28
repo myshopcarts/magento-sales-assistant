@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Mview/etc/mview.xsd">
+    <!-- Subscribe to product changes so Update-by-Schedule (recommended, since
+         embedding is heavy) reindexes changed products via the changelog. -->
+    <view id="myshopcarts_salesassistant_catalogue"
+          class="Myshopcarts\SalesAssistant\Model\Indexer\Catalogue"
+          group="indexer">
+        <subscriptions>
+            <table name="catalog_product_entity" entity_column="entity_id"/>
+        </subscriptions>
+    </view>
+    <view id="myshopcarts_salesassistant_knowledge"
+          class="Myshopcarts\SalesAssistant\Model\Indexer\Knowledge"
+          group="indexer">
+        <subscriptions>
+            <table name="cms_page" entity_column="page_id"/>
+            <table name="cms_block" entity_column="block_id"/>
+        </subscriptions>
+    </view>
+</config>

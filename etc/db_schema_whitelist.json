@@ -1,0 +1,66 @@
+{
+    "myshopcarts_salesassistant_document": {
+        "column": {
+            "entity_id": true,
+            "source_id": true,
+            "title": true,
+            "filename": true,
+            "s3_key": true,
+            "url": true,
+            "content_hash": true,
+            "markdown": true,
+            "chunk_count": true,
+            "status": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MYSHOPCARTS_SALESASSISTANT_DOCUMENT_SOURCE_ID": true
+        }
+    },
+    "myshopcarts_salesassistant_crawl_job": {
+        "column": {
+            "job_id": true,
+            "root_url": true,
+            "origin": true,
+            "method": true,
+            "status": true,
+            "consent": true,
+            "total_urls": true,
+            "done_urls": true,
+            "failed_urls": true,
+            "skipped_urls": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "index": {
+            "MYSHOPCARTS_SALESASSISTANT_CRAWL_JOB_STATUS": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    },
+    "myshopcarts_salesassistant_crawl_url": {
+        "column": {
+            "entity_id": true,
+            "job_id": true,
+            "url": true,
+            "lastmod": true,
+            "status": true,
+            "source_id": true,
+            "content_hash": true,
+            "chunk_count": true,
+            "reason": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "index": {
+            "MYSHOPCARTS_SALESASSISTANT_CRAWL_URL_JOB_STATUS": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "MYSHOPCARTS_SALESASSISTANT_CRAWL_URL_JOB_URL": true
+        }
+    }
+}

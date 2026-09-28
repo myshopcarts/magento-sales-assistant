@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!--
+  Registry of uploaded knowledge documents (K2b brick 4). The raw file lives durably in
+  the central AI-extension S3 bucket (s3_key); the EXTRACTED markdown is stored here as
+  the operational source of truth so a reindex re-chunks (MarkdownChunker) + re-embeds
+  locally without re-hitting the backend. One row per document; source_id is stable.
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="myshopcarts_salesassistant_document" resource="default" engine="innodb"
+           comment="Sales Assistant uploaded knowledge documents">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="varchar" name="source_id" length="128" nullable="false" comment="Stable knowledge source id"/>
+        <column xsi:type="varchar" name="title" length="255" nullable="false" default="" comment="Display title"/>
+        <column xsi:type="varchar" name="filename" length="255" nullable="false" default="" comment="Original filename"/>
+        <column xsi:type="varchar" name="s3_key" length="1024" nullable="false" default="" comment="Durable raw source key (central bucket); empty for URL sources"/>
+        <column xsi:type="varchar" name="url" length="1024" nullable="false" default="" comment="Source page URL (K3 URL sources); empty for uploaded files"/>
+        <column xsi:type="varchar" name="content_hash" length="64" nullable="false" default="" comment="sha1 of the extracted text"/>
+        <column xsi:type="mediumtext" name="markdown" nullable="true" comment="Extracted markdown (source of truth for reindex)"/>
+        <column xsi:type="int" name="chunk_count" unsigned="true" nullable="false" default="0" comment="Chunks indexed"/>
+        <column xsi:type="smallint" name="priority" unsigned="true" nullable="false" default="1" comment="Retrieval priority: 1=normal, 2=high, 3=highest (boosts ranking when relevant)"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="indexed" comment="indexed | error"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created at"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated at"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="MYSHOPCARTS_SALESASSISTANT_DOCUMENT_SOURCE_ID">
+            <column name="source_id"/>
+        </constraint>
+    </table>
+
+    <!-- Crawl brick C2: a bulk site-ingest JOB (discover → curate → async ingest). One row
+         per crawl; the per-URL work items live in _crawl_url. Consent (attestation) is
+         recorded on the job for evidence. Progress counters drive the UI + let a cron worker
+         resume/cancel across ticks. -->
+    <table name="myshopcarts_salesassistant_crawl_job" resource="default" engine="innodb"
+           comment="Sales Assistant bulk site-crawl jobs">
+        <column xsi:type="int" name="job_id" unsigned="true" nullable="false" identity="true" comment="Job ID"/>
+        <column xsi:type="varchar" name="root_url" length="1024" nullable="false" default="" comment="Entered site root"/>
+        <column xsi:type="varchar" name="origin" length="255" nullable="false" default="" comment="Same-origin lock (scheme+host)"/>
+        <column xsi:type="varchar" name="method" length="16" nullable="false" default="" comment="sitemap | crawl"/>
+        <column xsi:type="varchar" name="status" length="16" nullable="false" default="pending" comment="pending|running|paused|done|cancelled|failed"/>
+        <column xsi:type="smallint" name="consent" unsigned="true" nullable="false" default="0" comment="Owner/permission attestation (1=given)"/>
+        <column xsi:type="int" name="total_urls" unsigned="true" nullable="false" default="0" comment="Curated URL count"/>
+        <column xsi:type="int" name="done_urls" unsigned="true" nullable="false" default="0" comment="Indexed OK"/>
+        <column xsi:type="int" name="failed_urls" unsigned="true" nullable="false" default="0" comment="Errored"/>
+        <column xsi:type="int" name="skipped_urls" unsigned="true" nullable="false" default="0" comment="Skipped (dup/no text/robots)"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created at"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated at"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="job_id"/>
+        </constraint>
+        <index referenceId="MYSHOPCARTS_SALESASSISTANT_CRAWL_JOB_STATUS" indexType="btree">
+            <column name="status"/>
+        </index>
+    </table>
+
+    <!-- One work item per curated URL. The cron worker fetches → chunks → embeds → indexes
+         a bounded batch of `pending` rows per tick; status/reason record the outcome so the
+         merchant sees per-page results and can spot-check. -->
+    <table name="myshopcarts_salesassistant_crawl_url" resource="default" engine="innodb"
+           comment="Sales Assistant crawl work items (one per URL)">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="job_id" unsigned="true" nullable="false" comment="Owning crawl job"/>
+        <column xsi:type="varchar" name="url" length="1024" nullable="false" default="" comment="Page URL"/>
+        <column xsi:type="varchar" name="lastmod" length="64" nullable="false" default="" comment="Sitemap lastmod, if any"/>
+        <column xsi:type="varchar" name="status" length="16" nullable="false" default="pending" comment="pending|indexed|skipped|error"/>
+        <column xsi:type="varchar" name="source_id" length="128" nullable="false" default="" comment="Knowledge source id once indexed"/>
+        <column xsi:type="varchar" name="content_hash" length="64" nullable="false" default="" comment="sha1 of extracted text (dedup)"/>
+        <column xsi:type="int" name="chunk_count" unsigned="true" nullable="false" default="0" comment="Chunks indexed"/>
+        <column xsi:type="varchar" name="reason" length="255" nullable="false" default="" comment="Skip/error reason"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created at"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated at"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="MYSHOPCARTS_SALESASSISTANT_CRAWL_URL_JOB_URL">
+            <column name="job_id"/>
+            <column name="url"/>
+        </constraint>
+        <index referenceId="MYSHOPCARTS_SALESASSISTANT_CRAWL_URL_JOB_STATUS" indexType="btree">
+            <column name="job_id"/>
+            <column name="status"/>
+        </index>
+    </table>
+</schema>

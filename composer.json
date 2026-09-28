@@ -1,0 +1,20 @@
+{
+    "name": "myshopcarts/module-sales-assistant",
+    "description": "Storefront AI sales assistant: a chat widget that streams answers from the MyShopCarts backend over a WebSocket, grounded in this store's own catalogue via local OpenSearch. Secret key in encrypted config; the browser gets only a short-lived token.",
+    "type": "magento2-module",
+    "license": "MIT",
+    "version": "1.0.0",
+    "require": {
+        "php": "~8.1.0||~8.2.0||~8.3.0",
+        "magento/framework": "*",
+        "magento/module-csp": "*"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Myshopcarts\\SalesAssistant\\": ""
+        }
+    }
+}

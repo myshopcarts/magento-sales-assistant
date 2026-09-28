@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+  The bulk-crawl ingest worker (crawl brick C2). Runs on Magento cron and advances running
+  crawl jobs in small, time-budgeted batches so a large site ingests across ticks without a
+  request timeout. Self-limiting + idempotent; cron's per-job locking prevents overlap.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Crontab/etc/crontab.xsd">
+    <group id="default">
+        <job name="msc_salesassistant_run_crawls"
+             instance="Myshopcarts\SalesAssistant\Model\Cron\RunCrawls" method="execute">
+            <schedule>* * * * *</schedule>
+        </job>
+    </group>
+</config>

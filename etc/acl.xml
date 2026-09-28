@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Acl/etc/acl.xsd">
+    <acl>
+        <resources>
+            <resource id="Magento_Backend::admin">
+                <resource id="Magento_Backend::stores">
+                    <resource id="Magento_Backend::stores_settings">
+                        <resource id="Magento_Config::config">
+                            <resource id="Myshopcarts_SalesAssistant::config" title="Sales Assistant" sortOrder="1010"/>
+                        </resource>
+                    </resource>
+                </resource>
+                <resource id="Magento_Backend::content">
+                    <resource id="Myshopcarts_SalesAssistant::knowledge" title="Sales Assistant Knowledge" sortOrder="80"/>
+                </resource>
+            </resource>
+        </resources>
+    </acl>
+</config>
