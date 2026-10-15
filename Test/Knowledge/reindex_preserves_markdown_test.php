@@ -33,12 +33,20 @@ if (!interface_exists('Psr\\Log\\LoggerInterface')) {
 if (!class_exists('OpenSearch\\Client')) {
     eval('namespace OpenSearch; class Client {}');
 }
+if (!class_exists('Magento\\Framework\\FlagManager')) {   // in-memory stand-in for the flag table
+    eval('namespace Magento\\Framework; class FlagManager { private array $d = [];
+        public function getFlagData($c) { return $this->d[$c] ?? null; }
+        public function saveFlag($c, $v) { $this->d[$c] = $v; return true; }
+        public function deleteFlag($c) { unset($this->d[$c]); return true; } }');
+}
 
 require $base . '/Model/Ingest/KnowledgeIndexInterface.php';
 require $base . '/Model/Knowledge/DocumentRegistryInterface.php';
 require $base . '/Model/OpenSearch/ClientProvider.php';
 require $base . '/Model/OpenSearch/Schema.php';
 require $base . '/Model/SalesAssistantClient.php';
+require $base . '/Model/SalesAssistantApiException.php';
+require $base . '/Model/Ingest/EmbedGate.php';
 require $base . '/Model/Ingest/KnowledgeIndexer.php';
 
 use Myshopcarts\SalesAssistant\Model\Ingest\KnowledgeIndexer;
@@ -215,7 +223,7 @@ $check = static function (string $name, bool $ok) use (&$FAILS): void {
 };
 
 $makeKi = static function (StatefulRegistry $reg, FakeOsClient $os): KnowledgeIndexer {
-    return new KnowledgeIndexer(new FakeSchema(), new FakeClientProvider($os), new FakeSaClient(), new FakeLogger(), $reg);
+    return new KnowledgeIndexer(new FakeSchema(), new FakeClientProvider($os), new FakeSaClient(), new FakeLogger(), $reg, new \Myshopcarts\SalesAssistant\Model\Ingest\EmbedGate(new \Magento\Framework\FlagManager(), new FakeSaClient(), new FakeLogger()));
 };
 $seed = static function (StatefulRegistry $reg, string $sid): void {
     $reg->save([
@@ -257,7 +265,7 @@ echo "\n== blue/green rebuild targets a fresh version, commit promotes it (no de
 $reg = new StatefulRegistry();
 $os = new FakeOsClient();
 $schema = new FakeSchema();
-$ki = new KnowledgeIndexer($schema, new FakeClientProvider($os), new FakeSaClient(), new FakeLogger(), $reg);
+$ki = new KnowledgeIndexer($schema, new FakeClientProvider($os), new FakeSaClient(), new FakeLogger(), $reg, new \Myshopcarts\SalesAssistant\Model\Ingest\EmbedGate(new \Magento\Framework\FlagManager(), new FakeSaClient(), new FakeLogger()));
 $seed($reg, 'url:y');
 $version = $ki->beginRebuild();
 $check('beginRebuild created a fresh version', str_contains($version, '_myshopcarts_knowledge_v'));
@@ -273,7 +281,7 @@ echo "\n== commitRebuild refuses a bad publish and keeps the current index\n";
 $os = new FakeOsClient();
 $schema = new FakeSchema();
 $schema->promoteResult = false;
-$ki = new KnowledgeIndexer($schema, new FakeClientProvider($os), new FakeSaClient(), new FakeLogger(), new StatefulRegistry());
+$ki = new KnowledgeIndexer($schema, new FakeClientProvider($os), new FakeSaClient(), new FakeLogger(), new StatefulRegistry(), new \Myshopcarts\SalesAssistant\Model\Ingest\EmbedGate(new \Magento\Framework\FlagManager(), new FakeSaClient(), new FakeLogger()));
 $version = $ki->beginRebuild();
 $check('commit returns false when refused', $ki->commitRebuild() === false);
 $check('the refused version is discarded', $schema->deletedVersions === [$version]);
@@ -281,7 +289,7 @@ $check('the refused version is discarded', $schema->deletedVersions === [$versio
 // -- 5. abortRebuild discards the half-built version, never promotes -------------------------
 echo "\n== abortRebuild discards the in-progress version\n";
 $schema = new FakeSchema();
-$ki = new KnowledgeIndexer($schema, new FakeClientProvider(new FakeOsClient()), new FakeSaClient(), new FakeLogger(), new StatefulRegistry());
+$ki = new KnowledgeIndexer($schema, new FakeClientProvider(new FakeOsClient()), new FakeSaClient(), new FakeLogger(), new StatefulRegistry(), new \Myshopcarts\SalesAssistant\Model\Ingest\EmbedGate(new \Magento\Framework\FlagManager(), new FakeSaClient(), new FakeLogger()));
 $version = $ki->beginRebuild();
 $ki->abortRebuild();
 $check('abort deleted the version', $schema->deletedVersions === [$version]);

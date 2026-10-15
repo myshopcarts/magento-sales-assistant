@@ -54,6 +54,7 @@ $clients = new class($rec) extends ClientProvider {
 };
 $saClient = new class extends SalesAssistantClient {
     public function __construct() {}
+    public function catalogueMeaningSearch(): bool { return false; }   // the default since 1.2.7
 };
 $hs = new HybridSearch($schema, $clients, $saClient);
 

@@ -295,7 +295,15 @@ class CrawlDiscovery
     private function shape(array $urlToLastmod, int $maxUrls): array
     {
         $out = [];
+        $seen = [];
         foreach ($urlToLastmod as $url => $lastmod) {
+            // one entry per page: /x, /x/ and tracking/param-order variants are fetched once
+            // (doc/sales-assistant-crawl-url-normalisation.md).
+            $id = UrlIdentity::canonical($url) ?? $url;
+            if (isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
             $out[] = ['url' => $url, 'lastmod' => $lastmod];
             if (count($out) >= $maxUrls) {
                 break;

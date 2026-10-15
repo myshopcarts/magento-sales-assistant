@@ -51,6 +51,29 @@ define([], function () {
         function remember(role, text) { if (text) { thread.push({ role: role, text: text }); saveThread(); } }
         sessionId = ssGet(SID_KEY) || '';
 
+        // ---- analytics (best-effort, generic) ------------------------------
+        // Emit standard interaction events the merchant's OWN analytics can consume: pushed to the
+        // GA4 / Tag Manager dataLayer and to gtag() when present, and dispatched as a DOM
+        // CustomEvent ('salesassistant:<name>') for any other listener. No external calls, nothing
+        // leaves the store, and it is a silent no-op when no analytics is installed. An analytics
+        // failure must never break the widget.
+        function track(name) {
+            try {
+                window.dataLayer = window.dataLayer || [];
+                // gtag-command form — an arguments object, exactly what gtag('event', name) pushes.
+                // The gtag.js library delivers it to GA4 whether gtag() is a global (standalone
+                // gtag.js) OR module-local (Magento's built-in Google Analytics (GA4) integration,
+                // which never exposes window.gtag). Verified live on a Magento-native store: the
+                // {event:...} object form below is IGNORED by gtag.js (only GTM reads it), so this
+                // arguments form is the one that actually reaches GA4.
+                (function () { window.dataLayer.push(arguments); })('event', name);
+                // GTM custom-event form — for a Tag Manager container with a trigger on this event.
+                window.dataLayer.push({ event: name });
+                // DOM event — for any other analytics listener.
+                document.dispatchEvent(new CustomEvent('salesassistant:' + name));
+            } catch (e) { /* best-effort — never break the widget */ }
+        }
+
         // ---- DOM ------------------------------------------------------------
         var panel = el('div', 'msc-sa-panel'); panel.style.display = 'none';
         var log = el('div', 'msc-sa-log');
@@ -133,6 +156,7 @@ define([], function () {
             panel.style.display = opening ? 'flex' : 'none';
             lockScroll(opening);
             if (opening) {
+                track('chat_open');
                 // Greet on first open so the panel isn't empty (once — a reopen keeps history).
                 if (greeting && !log.children.length) { bubble('assistant', greeting); }
                 fitViewport();
@@ -177,22 +201,57 @@ define([], function () {
             return b;
         }
 
+        // ---- one bot turn at a time ---------------------------------------
+        // A message typed while the bot is still answering is shown immediately but SENT only once
+        // the current turn ends (done/error). Sending it straight away ran two turns concurrently
+        // on the backend: replies came back out of order, chunks landed in the wrong bubble, and
+        // the handoff snapshot missed the in-flight answer. In human mode there is no bot turn to
+        // wait for, so messages go straight through.
+        var busy = false, outbox = [], busyTimer = null, TURN_TIMEOUT_MS = 45000;
+        function dispatch(text) {
+            lastSources = [];
+            // In human mode the reply comes from a person (as an agent_msg), not the bot — don't
+            // open an empty assistant bubble that would spin forever waiting for a stream.
+            curBubble = humanMode ? null : bubble('assistant', '');
+            busy = !humanMode;
+            if (busy) { busyTimer = setTimeout(abandonTurn, TURN_TIMEOUT_MS); }
+            ensureSocket().then(function () {
+                ws.send(JSON.stringify({ action: 'message', text: text, assistant_name: assistantName, business_context: businessContext, call_to_action: callToAction, attribute_descriptor: attributeDescriptor }));
+            }).catch(function () {
+                if (curBubble) { curBubble.textContent = 'Sorry — the assistant is unavailable right now.'; }
+                curBubble = null;
+                settle();
+            });
+        }
+        // The current turn is over — release the next queued message, if any.
+        function settle() {
+            busy = false;
+            if (busyTimer) { clearTimeout(busyTimer); busyTimer = null; }
+            // Bot mode: dispatch() re-arms `busy`, so one message goes per turn. Human mode: no
+            // turn to wait for, so the whole queue drains to the agent.
+            while (!busy && outbox.length) { dispatch(outbox.shift()); }
+        }
+        // No done/error arrived (lost frame, dropped socket) — don't leave the queue stuck.
+        function abandonTurn() {
+            busyTimer = null;
+            if (!busy) { return; }
+            if (curBubble && (!curBubble.textContent || isPlaceholder(curBubble.textContent))) {
+                curBubble.textContent = 'Sorry — that took too long. Please try again.';
+            }
+            curBubble = null;
+            settle();
+        }
+
         form.addEventListener('submit', function (e) {
             e.preventDefault();
             var text = input.value.trim();
             if (!text) { return; }
             input.value = '';
-            lastSources = [];
+            track('chat_message_sent');
             bubble('user', text);
             remember('user', text);
-            // In human mode the reply comes from a person (as an agent_msg), not the bot — don't
-            // open an empty assistant bubble that would spin forever waiting for a stream.
-            curBubble = humanMode ? null : bubble('assistant', '');
-            ensureSocket().then(function () {
-                ws.send(JSON.stringify({ action: 'message', text: text, assistant_name: assistantName, business_context: businessContext, call_to_action: callToAction, attribute_descriptor: attributeDescriptor }));
-            }).catch(function () {
-                if (curBubble) { curBubble.textContent = 'Sorry — the assistant is unavailable right now.'; }
-            });
+            if (busy) { outbox.push(text); return; }
+            dispatch(text);
         });
 
         // ---- WebSocket ------------------------------------------------------
@@ -215,7 +274,19 @@ define([], function () {
                 var sock = new WebSocket(url);
                 sock.addEventListener('open', function () { ws = sock; resolve(); });
                 sock.addEventListener('error', function () { reject(new Error('ws error')); });
-                sock.addEventListener('close', function () { if (ws === sock) { ws = null; } });
+                sock.addEventListener('close', function () {
+                    if (ws !== sock) { return; }
+                    ws = null;
+                    // The socket died mid-turn: the reply will never arrive on it. Close the turn so
+                    // queued messages go out on a fresh connection instead of waiting for the timeout.
+                    if (busy) {
+                        if (curBubble && (!curBubble.textContent || isPlaceholder(curBubble.textContent))) {
+                            curBubble.textContent = 'Sorry — the connection dropped. Please try again.';
+                        }
+                        curBubble = null;
+                        settle();
+                    }
+                });
                 sock.addEventListener('message', onFrame);
             });
         }
@@ -231,6 +302,9 @@ define([], function () {
             } else if (f.type === 'agent_joined') {
                 humanMode = true;
                 if (curBubble && !curBubble.textContent) { curBubble.parentNode && curBubble.parentNode.removeChild(curBubble); curBubble = null; }
+                // A person has the chat now: anything queued goes straight to them (dispatch in
+                // human mode doesn't wait). An in-flight bot turn still ends with its own done.
+                if (!curBubble && busy) { settle(); }
                 var note = el('div', 'msc-sa-note');
                 note.textContent = (f.agent_name || 'Someone') + ' from the team joined the chat.';
                 log.appendChild(note); scrollToBottom();
@@ -259,9 +333,11 @@ define([], function () {
                 renderSources(Array.isArray(f.sources) ? f.sources : lastSources);
                 scrollToBottom();   // final answer + sources fully in view
                 curBubble = null;
+                settle();
             } else if (f.type === 'error') {
                 if (curBubble) { curBubble.textContent = f.message || 'Something went wrong.'; }
                 curBubble = null;
+                settle();
             }
         }
 

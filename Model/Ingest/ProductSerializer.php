@@ -149,7 +149,13 @@ class ProductSerializer
 
     private function attr(ProductInterface $p, string $code): string
     {
-        if (method_exists($p, 'getAttributeText')) {
+        // getAttributeText() is getResource()->getAttribute($code)->getSource()->… — on a store where
+        // the attribute doesn't exist (no `brand`/`color`/… — e.g. a fresh install without sample
+        // data, or a merchant's own attribute set) getAttribute() returns false and Magento's method
+        // FATALS ("getSource() on false"), aborting the whole catalogue rebuild. Check first.
+        $resource = method_exists($p, 'getResource') ? $p->getResource() : null;
+        $known = $resource && method_exists($resource, 'getAttribute') && $resource->getAttribute($code);
+        if ($known && method_exists($p, 'getAttributeText')) {
             $t = $p->getAttributeText($code);
             // Multiselect attributes return an array of option labels.
             if (is_array($t)) { $t = implode(', ', array_map('strval', $t)); }

@@ -63,9 +63,11 @@ class HybridSearch
             ]],
         ]]));
 
-        // Vector (k-NN) — only if the query embeds and the index has vectors.
+        // Vector (k-NN) — only with catalogue meaning search on (else keyword-only: no query embed,
+        // and no ranking bias toward products that happen to have vectors), the index has vectors,
+        // and the query embeds.
         $knn = [];
-        if ($this->schema->hasVector($index)) {
+        if ($this->client->catalogueMeaningSearch() && $this->schema->hasVector($index)) {
             $vec = $this->embed($query);
             if ($vec) {
                 $knn = $this->hits($client->search(['index' => $index, 'body' => [

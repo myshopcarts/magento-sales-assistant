@@ -187,6 +187,31 @@ class Schema
         return true;
     }
 
+    /**
+     * Versions of OUR products / knowledge index ({alias}_v…) that the read alias does NOT point at —
+     * the leftovers of a rebuild that was killed before it could promote or abort. Never wildcard-deletes:
+     * callers delete each name through the guarded delete*Version().
+     * @return string[]
+     */
+    public function orphanVersions(string $alias): array
+    {
+        $client = $this->clients->get();
+        try {
+            $all = array_keys($client->indices()->get(['index' => $alias . '_v*', 'allow_no_indices' => true]));
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $live = [];
+        try {
+            if ($client->indices()->existsAlias(['name' => $alias])) {
+                $live = array_keys($client->indices()->getAlias(['name' => $alias]));
+            }
+        } catch (\Throwable $e) {
+            return [];   // can't tell what's live → touch nothing
+        }
+        return array_values(array_filter($all, fn($i) => str_starts_with($i, $alias . '_v') && !in_array($i, $live, true)));
+    }
+
     /** Delete one knowledge VERSION (a half-built rebuild that was aborted). Guarded to our own. */
     public function deleteKnowledgeVersion(string $version): void
     {

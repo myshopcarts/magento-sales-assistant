@@ -29,10 +29,22 @@
             </argument>
         </arguments>
     </type>
+    <!-- Console commands are built on EVERY bin/magento call — keep their heavy deps lazy. -->
+    <type name="Myshopcarts\SalesAssistant\Console\Command\Status">
+        <arguments>
+            <argument name="backfill" xsi:type="object">Myshopcarts\SalesAssistant\Model\Ingest\VectorBackfill\Proxy</argument>
+            <argument name="gate" xsi:type="object">Myshopcarts\SalesAssistant\Model\Ingest\EmbedGate\Proxy</argument>
+            <argument name="client" xsi:type="object">Myshopcarts\SalesAssistant\Model\SalesAssistantClient\Proxy</argument>
+            <argument name="estimate" xsi:type="object">Myshopcarts\SalesAssistant\Model\Ingest\CatalogueEstimate\Proxy</argument>
+            <argument name="recovery" xsi:type="object">Myshopcarts\SalesAssistant\Model\Indexer\RebuildRecovery\Proxy</argument>
+            <argument name="heartbeat" xsi:type="object">Myshopcarts\SalesAssistant\Model\Indexer\RebuildHeartbeat\Proxy</argument>
+        </arguments>
+    </type>
     <type name="Magento\Framework\Console\CommandListInterface">
         <arguments>
             <argument name="commands" xsi:type="array">
                 <item name="salesassistant_reindex" xsi:type="object">Myshopcarts\SalesAssistant\Console\Command\Reindex</item>
+                <item name="salesassistant_status" xsi:type="object">Myshopcarts\SalesAssistant\Console\Command\Status</item>
             </argument>
         </arguments>
     </type>

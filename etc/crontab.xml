@@ -6,6 +6,15 @@
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:framework:Crontab/etc/crontab.xsd">
+    <!-- Adds vectors to content indexed without one (allowance spent / provider trouble at index time);
+         doc/sales-assistant-indexing-v3.md §3c. Own group (etc/cron_groups.xml) so a slow embed call can
+         never delay Magento's default/index groups; near-free when there is nothing to heal. -->
+    <group id="salesassistant">
+        <job name="msc_salesassistant_vector_backfill"
+             instance="Myshopcarts\SalesAssistant\Model\Cron\BackfillVectors" method="execute">
+            <schedule>*/5 * * * *</schedule>
+        </job>
+    </group>
     <group id="default">
         <job name="msc_salesassistant_run_crawls"
              instance="Myshopcarts\SalesAssistant\Model\Cron\RunCrawls" method="execute">

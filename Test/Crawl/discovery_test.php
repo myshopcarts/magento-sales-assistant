@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 $base = dirname(__DIR__, 2); // …/Myshopcarts/SalesAssistant
 require $base . '/Model/Knowledge/PageFetcherInterface.php';
+require $base . '/Model/Knowledge/UrlIdentity.php';
 require $base . '/Model/Knowledge/CrawlDiscovery.php';
 
 use Myshopcarts\SalesAssistant\Model\Knowledge\CrawlDiscovery;

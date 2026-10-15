@@ -62,6 +62,24 @@
                     <comment>Index your active CMS static blocks as assistant knowledge.</comment>
                 </field>
             </group>
+            <group id="catalogue" translate="label" sortOrder="25" showInDefault="1">
+                <label>Catalogue search</label>
+                <field id="meaning_search" translate="label" type="select" sortOrder="10" showInDefault="1">
+                    <label>Meaning search for products</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>
+                        <model>Myshopcarts\SalesAssistant\Model\Config\CatalogueMeaningComment</model>
+                    </comment>
+                </field>
+            </group>
+            <group id="indexing" translate="label" sortOrder="30" showInDefault="1">
+                <label>Indexing performance</label>
+                <field id="cpu_share" translate="label comment" type="text" sortOrder="10" showInDefault="1">
+                    <label>Share of time indexing may work (%)</label>
+                    <validate>validate-digits validate-digits-range digits-range-5-100</validate>
+                    <comment>Large catalogue rebuilds pause between batches so they never slow your store down. 25 (the default) means indexing works at most a quarter of the time. Raise it to finish a big first index faster on a quiet store; 100 turns the pauses off.</comment>
+                </field>
+            </group>
         </section>
     </system>
 </config>

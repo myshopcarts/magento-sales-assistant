@@ -6,6 +6,11 @@
  * returns a structured result; the caller (cron worker) persists the crawl_url row + job
  * counters. No DB of its own → unit-testable with fakes.
  *
+ * One entry per page (doc/sales-assistant-crawl-url-normalisation.md): the source id and the
+ * stored URL come from the canonical URL (UrlIdentity), so `/a`, `/a/`, `/a?utm_source=x` are one
+ * entry; keys from before that (raw URL, toggled slash) are deleted on the next crawl, and a page
+ * skipped as a duplicate drops its own previously indexed copy.
+ *
  * Result status mirrors the crawl_url table:
  *   indexed — fetched, chunked, embedded + indexed; source registered.
  *   skipped — reachable but nothing to add (no readable text, or duplicate content).
@@ -33,7 +38,8 @@ class CrawlIngestor
      */
     public function ingest(string $url): array
     {
-        $sourceId = 'url:' . md5($url);
+        $sourceId = UrlIdentity::sourceId($url);
+        $pageUrl = UrlIdentity::canonical($url) ?? $url;
         $out = ['status' => 'error', 'source_id' => $sourceId, 'title' => '',
                 'content_hash' => '', 'chunk_count' => 0, 'reason' => ''];
 
@@ -42,6 +48,13 @@ class CrawlIngestor
         } catch (\Throwable $e) {
             $out['reason'] = $e->getMessage();
             return $out;
+        }
+
+        // Old spellings of this page's key (pre-canonical entries) — removed once, on this crawl.
+        foreach (UrlIdentity::oldSourceIds($url) as $old) {
+            if ($this->registry->getBySourceId($old)) {
+                $this->indexer->deleteSource($old);
+            }
         }
 
         $page = $this->html->convertPage($rawHtml);
@@ -69,6 +82,10 @@ class CrawlIngestor
         // duplicate — everywhere on real sites) → skip, don't double-index.
         $dupe = $this->registry->findByContentHash($hash, $sourceId);
         if ($dupe) {
+            if ($existing) {
+                // this page's own earlier copy would keep answering with the old text
+                $this->indexer->deleteSource($sourceId);
+            }
             $out['status'] = 'skipped';
             $out['reason'] = 'duplicate of “' . ($dupe['title'] ?: $dupe['source_id']) . '”';
             return $out;
@@ -77,7 +94,7 @@ class CrawlIngestor
         $chunks = $this->chunker->chunk($markdown, [
             'title' => $out['title'],
             'source_id' => $sourceId,
-            'url' => $url,
+            'url' => $pageUrl,
             'content_hash' => $hash,
         ]);
         if (!$chunks) {
@@ -93,7 +110,7 @@ class CrawlIngestor
             'title' => $out['title'],
             'filename' => '',
             's3_key' => '',
-            'url' => $url,
+            'url' => $pageUrl,
             'content_hash' => $hash,
             'markdown' => $markdown,
             'chunk_count' => $count,

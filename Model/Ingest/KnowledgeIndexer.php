@@ -31,7 +31,8 @@ class KnowledgeIndexer implements KnowledgeIndexInterface
         private readonly ClientProvider $clients,
         private readonly SalesAssistantClient $client,
         private readonly LoggerInterface $logger,
-        private readonly DocumentRegistryInterface $registry
+        private readonly DocumentRegistryInterface $registry,
+        private readonly EmbedGate $gate
     ) {
     }
 
@@ -238,14 +239,30 @@ class KnowledgeIndexer implements KnowledgeIndexInterface
         $batch = $this->pending;
         $this->pending = [];
 
+        // Never degrade silently (doc/sales-assistant-indexing-v3.md §3c) — see CatalogIndexer::flush.
         $vectors = [];
-        if ($this->vector) {
+        // A refusal from the backend's shared indexing budget (reason `budget`) is paced: wait out
+        // the minute and retry a few times, so a rebuild keeps its vectors instead of racing ahead.
+        for ($attempt = 1; $this->vector && ($this->gate->allows() || $this->gate->pace()); $attempt++) {
             try {
                 $resp = $this->client->embed(array_column($batch, 'text'), 'search_document');
                 $vectors = $resp['embeddings'] ?? [];
+                if (count($vectors) !== count($batch)) {
+                    throw new \RuntimeException(sprintf('embed returned %d vectors for %d texts', count($vectors), count($batch)));
+                }
+                $this->gate->success();
+                break;
             } catch (\Throwable $e) {
-                $this->logger->error('SalesAssistant knowledge embed failed; indexing lexical-only. ' . $e->getMessage());
+                $reason = $this->gate->failure($e);
+                if ($reason === 'budget' && $attempt < 3) {
+                    continue;
+                }
+                $this->logger->warning(sprintf(
+                    'SalesAssistant knowledge embed unavailable (%s); %d chunks indexed without vectors for now — the vector backfill job adds them later. %s',
+                    $reason, count($batch), $e->getMessage()
+                ));
                 $vectors = [];
+                break;
             }
         }
 

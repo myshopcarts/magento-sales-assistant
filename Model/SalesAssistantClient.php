@@ -6,9 +6,12 @@
  * PortalClient, but simpler: a static key, not client-credentials OAuth.
  *
  * Uses the Magento framework HTTP client (never raw curl/fopen) and treats the
- * configured base URL under SSRF rules (must be our https host). Two calls:
+ * configured base URL under SSRF rules (must be our https host). Main calls:
  *   - mintWidgetToken(): exchange the secret for a short-lived browser token.
  *   - embed(): text -> vectors (used by the E6 ingestion pipeline).
+ *   - embedBudget(): this store's embedding allowance / used / remaining (budget-aware indexing).
+ * Failures throw SalesAssistantApiException carrying the HTTP status (402 allowance spent,
+ * 429 provider busy, 5xx / 0 provider or network trouble).
  */
 declare(strict_types=1);
 
@@ -43,6 +46,17 @@ class SalesAssistantClient
             && $this->cfg('secret_key') !== '';
     }
 
+    /**
+     * Catalogue meaning search (embeddings for products). OFF by default: the catalogue is searched
+     * by keyword (after the AI rewrites the shopper's question into search terms + filters) and
+     * costs no embedding tokens; knowledge documents and pages are always embedded. Turning it on
+     * needs no reindex — the vector backfill job embeds the existing catalogue documents.
+     */
+    public function catalogueMeaningSearch(): bool
+    {
+        return $this->config->isSetFlag('myshopcarts_salesassistant/catalogue/meaning_search');
+    }
+
     public function wsUrl(): string
     {
         return $this->cfg('ws_url');
@@ -60,6 +74,12 @@ class SalesAssistantClient
     public function embed(array $texts, string $inputType = 'search_document'): array
     {
         return $this->request('POST', '/embed', ['texts' => $texts, 'input_type' => $inputType]);
+    }
+
+    /** This store's embedding budget: {metered, allowance, used, remaining, available}. */
+    public function embedBudget(): array
+    {
+        return $this->request('GET', '/embed/budget');
     }
 
     /** Mint a presigned PUT for a knowledge-source upload: {upload_url, s3_key, ...} (K2b). */
@@ -138,15 +158,23 @@ class SalesAssistantClient
             $curl->post($url, $body !== null ? $this->json->serialize($body) : '');
         }
 
-        $status = $curl->getStatus();
-        $decoded = $curl->getBody() !== '' ? $this->json->unserialize($curl->getBody()) : [];
+        $status = (int)$curl->getStatus();
+        try {
+            $decoded = $curl->getBody() !== '' ? $this->json->unserialize($curl->getBody()) : [];
+        } catch (\InvalidArgumentException $e) {
+            $decoded = [];   // non-JSON error page (gateway / proxy) — the status still decides
+        }
         if ($status < 200 || $status >= 300) {
             $msg = is_array($decoded) ? (string)($decoded['error'] ?? '') : '';
             // Never log the secret; log only method/path/status.
             $this->logger->error(sprintf('SalesAssistantClient %s %s -> HTTP %d: %s', $method, $path, $status, $msg ?: 'unknown'));
             // Surface the backend's specific reason (admin-facing, e.g. "pdf is encrypted",
             // "no extractable text") so callers can show it; fall back to the status code.
-            throw new \RuntimeException($msg !== '' ? $msg : sprintf('request failed (HTTP %d)', $status));
+            throw new SalesAssistantApiException(
+                $msg !== '' ? $msg : sprintf('request failed (HTTP %d)', $status),
+                $status,
+                is_array($decoded) ? $decoded : []
+            );
         }
         return is_array($decoded) ? $decoded : [];
     }

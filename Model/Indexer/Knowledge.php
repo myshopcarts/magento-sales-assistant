@@ -15,6 +15,7 @@ use Magento\Framework\Indexer\ActionInterface;
 use Magento\Framework\Mview\ActionInterface as MviewActionInterface;
 use Myshopcarts\SalesAssistant\Model\Ingest\KnowledgeIndexInterface;
 use Myshopcarts\SalesAssistant\Model\Knowledge\Source\KnowledgeSourceInterface;
+use Myshopcarts\SalesAssistant\Model\Ingest\IndexingThrottle;
 use Myshopcarts\SalesAssistant\Model\SalesAssistantClient;
 use Psr\Log\LoggerInterface;
 
@@ -25,6 +26,8 @@ class Knowledge implements ActionInterface, MviewActionInterface
         private readonly KnowledgeIndexInterface $indexer,
         private readonly SalesAssistantClient $client,
         private readonly LoggerInterface $logger,
+        private readonly IndexingThrottle $throttle,
+        private readonly RebuildHeartbeat $heartbeat,
         private readonly array $sources = []
     ) {
     }
@@ -41,20 +44,28 @@ class Knowledge implements ActionInterface, MviewActionInterface
         // tombstone churn. A source that yields no chunks (CMS toggle off, a removed upload) is
         // simply not carried into the fresh index; no destructive per-source delete is needed.
         $this->indexer->beginRebuild();
+        $this->heartbeat->start(RebuildHeartbeat::KNOWLEDGE);   // §3i
+        $published = false;
         try {
             foreach ($this->sources as $source) {
                 foreach ($source->documents() as $doc) {
                     if (!empty($doc['chunks'])) {
+                        $t0 = microtime(true);
                         $this->indexer->index($doc['chunks']);
+                        $this->heartbeat->beat(RebuildHeartbeat::KNOWLEDGE);
+                        $this->throttle->yield(microtime(true) - $t0);
                     }
                 }
             }
-            if (!$this->indexer->commitRebuild()) {
+            $published = $this->indexer->commitRebuild();
+            if (!$published) {
                 $this->logger->warning('SalesAssistant knowledge rebuild not published; kept the current index.');
             }
         } catch (\Throwable $e) {
             $this->indexer->abortRebuild();
             $this->logger->error('SalesAssistant knowledge rebuild failed; kept the current index. ' . $e->getMessage());
+        } finally {
+            $this->heartbeat->finish(RebuildHeartbeat::KNOWLEDGE, $published);
         }
     }
 

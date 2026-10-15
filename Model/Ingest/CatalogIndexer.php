@@ -31,7 +31,8 @@ class CatalogIndexer
         private readonly ClientProvider $clients,
         private readonly ProductSerializer $serializer,
         private readonly SalesAssistantClient $client,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly EmbedGate $gate
     ) {
     }
 
@@ -105,14 +106,33 @@ class CatalogIndexer
         $batch = $this->pending;
         $this->pending = [];
 
+        // Never degrade silently (doc/sales-assistant-indexing-v3.md §3c): when the gate is closed
+        // (allowance spent / provider trouble) or the call fails, the batch is still written — it
+        // stays keyword-searchable, never missing — and VectorBackfill adds the vectors later.
         $vectors = [];
-        if ($this->vector) {
+        // A refusal from the backend's shared indexing budget (reason `budget`) is paced: wait out
+        // the minute and retry a few times, so a rebuild keeps its vectors instead of racing ahead.
+        $embed = $this->vector && $this->client->catalogueMeaningSearch();   // keyword-only catalogue by default
+        for ($attempt = 1; $embed && ($this->gate->allows() || $this->gate->pace()); $attempt++) {
             try {
                 $resp = $this->client->embed(array_column($batch, 'text'), 'search_document');
                 $vectors = $resp['embeddings'] ?? [];
+                if (count($vectors) !== count($batch)) {
+                    throw new \RuntimeException(sprintf('embed returned %d vectors for %d texts', count($vectors), count($batch)));
+                }
+                $this->gate->success();
+                break;
             } catch (\Throwable $e) {
-                $this->logger->error('SalesAssistant embed failed; indexing this batch lexical-only. ' . $e->getMessage());
+                $reason = $this->gate->failure($e);
+                if ($reason === 'budget' && $attempt < 3) {
+                    continue;
+                }
+                $this->logger->warning(sprintf(
+                    'SalesAssistant embed unavailable (%s); %d chunks indexed without vectors for now — the vector backfill job adds them later. %s',
+                    $reason, count($batch), $e->getMessage()
+                ));
                 $vectors = [];
+                break;
             }
         }
 

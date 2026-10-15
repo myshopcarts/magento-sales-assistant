@@ -21,8 +21,11 @@ use Magento\Framework\Mview\ActionInterface as MviewActionInterface;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
 use Magento\Catalog\Model\Product\Visibility;
 use Myshopcarts\SalesAssistant\Model\Ingest\CatalogIndexer;
+use Myshopcarts\SalesAssistant\Model\Ingest\IndexingThrottle;
+use Myshopcarts\SalesAssistant\Model\Ingest\SetupContext;
 use Myshopcarts\SalesAssistant\Model\SalesAssistantClient;
 use Psr\Log\LoggerInterface;
+
 
 class Catalogue implements ActionInterface, MviewActionInterface
 {
@@ -33,7 +36,9 @@ class Catalogue implements ActionInterface, MviewActionInterface
         private readonly CatalogIndexer $indexer,
         private readonly Visibility $visibility,
         private readonly SalesAssistantClient $client,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly IndexingThrottle $throttle,
+        private readonly RebuildHeartbeat $heartbeat
     ) {
     }
 
@@ -41,6 +46,18 @@ class Catalogue implements ActionInterface, MviewActionInterface
     public function executeFull(): void
     {
         if (!$this->client->isEnabled()) {
+            return;
+        }
+        if (SetupContext::insideSetupCommand()) {
+            // setup:upgrade / setup:install reindex EVERY indexer (Magento's sample-data modules
+            // call reindexAll() on each run) — a full catalogue re-embed there would hold the
+            // install for hours and spend the embedding allowance. Keep the live index (new and
+            // changed products still flow in through the changelog) and rebuild only on purpose:
+            // bin/magento indexer:reindex myshopcarts_salesassistant_catalogue.
+            // doc/sales-assistant-indexing-v3.md §3e2.
+            $this->logger->warning('SalesAssistant: full catalogue rebuild skipped inside a setup:* command; '
+                . 'the current index stays live. Rebuild on purpose with '
+                . 'bin/magento indexer:reindex myshopcarts_salesassistant_catalogue.');
             return;
         }
         // Blue/green: build a fresh version with the CURRENT mapping, page into it, then atomically swap
@@ -52,10 +69,15 @@ class Catalogue implements ActionInterface, MviewActionInterface
             ->setVisibility($this->visibility->getVisibleInSiteIds())
             ->addFieldToFilter('status', 1)
             ->getSize();
+        // Never let a big rebuild slow the store: a duty cycle per page
+        // (IndexingThrottle, default 25 % of the time) — doc/sales-assistant-indexing-v3.md §3g.
         $version = $this->indexer->beginFullRebuild($count);
+        // "still alive" after every page, so a killed rebuild can be told from a running one (§3i).
+        $this->heartbeat->start(RebuildHeartbeat::CATALOGUE, $version);
         try {
             $page = 1;
             do {
+                $t0 = microtime(true);
                 $collection = $this->collectionFactory->create();
                 $collection->addAttributeToSelect('*')
                     ->setVisibility($this->visibility->getVisibleInSiteIds())
@@ -69,12 +91,17 @@ class Catalogue implements ActionInterface, MviewActionInterface
                 $this->indexer->index($items, $version);
                 $last = (int)$collection->getLastPageNumber();
                 $page++;
+                $this->heartbeat->beat(RebuildHeartbeat::CATALOGUE);
+                $this->throttle->yield(microtime(true) - $t0);
             } while ($page <= $last);
         } catch (\Throwable $e) {
             $this->indexer->abortFullRebuild($version);
+            $this->heartbeat->finish(RebuildHeartbeat::CATALOGUE, false);
             throw $e;
         }
-        if (!$this->indexer->promoteFullRebuild($version)) {
+        $promoted = $this->indexer->promoteFullRebuild($version);
+        $this->heartbeat->finish(RebuildHeartbeat::CATALOGUE, $promoted);
+        if (!$promoted) {
             $this->logger->warning('SalesAssistant: full reindex produced an empty index; kept the previous version.');
         }
     }

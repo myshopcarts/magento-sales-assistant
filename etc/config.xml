@@ -18,6 +18,16 @@
                 <index_cms_pages>1</index_cms_pages>
                 <index_cms_blocks>1</index_cms_blocks>
             </knowledge>
+            <catalogue>
+                <!-- Catalogue meaning search (product embeddings) — OFF by default; knowledge is
+                     always embedded. doc/sales-assistant-indexing-v3.md §3h. -->
+                <meaning_search>0</meaning_search>
+            </catalogue>
+            <indexing>
+                <!-- Percent of the time big rebuilds / the vector backfill may work (duty cycle)
+                     — doc/sales-assistant-indexing-v3.md §3g. -->
+                <cpu_share>25</cpu_share>
+            </indexing>
         </myshopcarts_salesassistant>
     </default>
 </config>
